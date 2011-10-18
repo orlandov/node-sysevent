@@ -11,7 +11,8 @@
 using namespace v8;
 using namespace node;
 
-struct subscriber_list_node;
+struct event_node;
+struct subscription_node;
 
 class Subscription: public EventEmitter {
   public:
@@ -20,8 +21,10 @@ class Subscription: public EventEmitter {
 
     static void event_handler(sysevent_t *ev);
     static ev_async eio_notifier;
-    static subscriber_list_node *all_subscriptions;
-    static subscriber_list_node *last_subscription;
+    static subscription_node *all_subscriptions;
+    static subscription_node *last_subscription;
+    static event_node *event_queue;
+    static int subscription_count;
 
   protected:
     Subscription();
@@ -39,12 +42,16 @@ class Subscription: public EventEmitter {
     sysevent_handle_t *shp;
 };
 
-struct subscriber_list_node {
+struct subscription_node {
   Subscription *sub;
 
-  subscriber_list_node *next;
-  subscriber_list_node *prev;
+  subscription_node *next;
+  subscription_node *prev;
 };
 
+struct event_node {
+  sysevent_t *ev;
+  event_node *next;
+};
 
 #endif
