@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
       err = nvlist_add_string(attr_list, "str data",
           string_val);
     if (err == 0)
-      err = sysevent_post_event("zone::status", "ESC_MYSUBCLASS",
+      err = sysevent_post_event("class1", "ESC_MYSUBCLASS",
           "SUNW", argv[0], NULL, &eid);
     if (err != 0)
       fprintf(stderr, "error logging system event\n");

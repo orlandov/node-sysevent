@@ -35,7 +35,8 @@ def configure(conf):
 																		 '-D' + os.uname()[0],
                                      '-Wall',
                                      '-fPIC',
-                                     '-Werror'])
+                                     '-Werror',
+                                     '-fno-strict-aliasing'])
   if o.debug:
     conf.env.append_value('CXXFLAGS', ["-g"])
   else:
