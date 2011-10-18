@@ -1,12 +1,12 @@
 #ifndef NODE_SYSEVENT_SUBSCRIPTION_H
 #define NODE_SYSEVENT_SUBSCRIPTION_H
 
-#include <libsysevent.h>
-#include <libnvpair.h>
-
 #include <v8.h>
 #include <node.h>
 #include <node_events.h>
+
+#include <libsysevent.h>
+#include <libnvpair.h>
 
 using namespace v8;
 using namespace node;
@@ -33,12 +33,12 @@ class Subscription: public EventEmitter {
     static Handle<Value> New(const Arguments &args);
     static Handle<Value> Subscribe(const Arguments& args);
     static Handle<Value> Unsubscribe(const Arguments& args);
-    static Handle<Value> Post(const Arguments& args);
+
+    char *subscribed_class;
+    char **subscribed_subclasses;
+    int num_subclasses;
 
   private:
-    char *subscribed_class;
-    char *subscribed_subclasses[];
-
     sysevent_handle_t *shp;
 };
 
