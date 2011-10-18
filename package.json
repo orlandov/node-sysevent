@@ -1,0 +1,21 @@
+{
+  "name": "sysevent",
+  "version": "1.0.0",
+  "devDependencies": {
+    "nodeunit": "*"
+  },
+  "scripts": {
+    "preinstall": "node-waf clean || true; node-waf configure build",
+    "test": "NODE_PATH=lib ./node_modules/nodeunit/bin/nodeunit test"
+  },
+  "engines": {
+    "node": "*"
+  },
+  "directories": {
+    "lib": "./lib"
+  },
+  "description": "Node.js interface to libsysevent events.",
+  "repository": {},
+  "author": "Orlando Vazquez <ovazquez@gmail.com> (http://or.lan.do/)",
+  "main": "lib/sysevent"
+}
