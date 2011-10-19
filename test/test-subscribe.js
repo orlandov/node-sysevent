@@ -17,7 +17,7 @@ exports["test subscribing to all events"]
     test.done();
   });
 
-  sub.subscribe("xxx", "subclass1");
+  sub.subscribe("xxx", "yyy");
 
   var event = { key1: 'value' };
   sysevent.post("xxx", "yyy", "joyent", process.argv[1], event)

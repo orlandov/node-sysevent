@@ -5,14 +5,14 @@
 #include <node.h>
 #include <node_events.h>
 
+#include <list>
+#include <vector>
+
 #include <libsysevent.h>
 #include <libnvpair.h>
 
 using namespace v8;
 using namespace node;
-
-struct event_node;
-struct subscription_node;
 
 class Subscription: public EventEmitter {
   public:
@@ -21,9 +21,8 @@ class Subscription: public EventEmitter {
 
     static void event_handler(sysevent_t *ev);
     static ev_async eio_notifier;
-    static subscription_node *all_subscriptions;
-    static subscription_node *last_subscription;
-    static event_node *event_queue;
+    static std::list<Subscription *> all_subscriptions;
+    static std::list<sysevent_t *> event_queue;
     static int subscription_count;
 
   protected:
@@ -35,23 +34,10 @@ class Subscription: public EventEmitter {
     static Handle<Value> Unsubscribe(const Arguments& args);
 
     char *subscribed_class;
-    char **subscribed_subclasses;
-    int num_subclasses;
+    std::vector<char *> subscribed_subclasses;
 
   private:
     sysevent_handle_t *shp;
-};
-
-struct subscription_node {
-  Subscription *sub;
-
-  subscription_node *next;
-  subscription_node *prev;
-};
-
-struct event_node {
-  sysevent_t *ev;
-  event_node *next;
 };
 
 #endif

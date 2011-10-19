@@ -24,9 +24,11 @@ Handle<Value> Post(const Arguments &args) {
   int err;
   sysevent_id_t eid;
 
+  printf("got here 3\n");
   err = sysevent_post_event(*event_class, *event_subclass, *vendor, *process,
     NULL, &eid);
 
+  printf("got here 4\n");
   return Undefined();
 }
 

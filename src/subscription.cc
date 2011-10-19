@@ -2,70 +2,55 @@
 #include "subscription.h"
 #include "strings.h"
 
+#include <list>
+#include <vector>
+
 using namespace v8;
 using namespace node;
 
 Persistent<FunctionTemplate> Subscription::constructor_template;
 ev_async Subscription::eio_notifier;
-subscription_node *Subscription::all_subscriptions = NULL;
-subscription_node *Subscription::last_subscription = NULL;
-event_node *Subscription::event_queue = NULL;
+std::list<Subscription *> Subscription::all_subscriptions;
+std::list<sysevent_t *> Subscription::event_queue;
 int Subscription::subscription_count = 0;
 
 void EnqueueEvent(sysevent_t *ev) {
   int ev_sz = 0;
   sysevent_t *copy = NULL;
-  event_node *cur = NULL;
 
   // Push the event onto the queue.
   ev_sz = sysevent_get_size(ev);
   copy = (sysevent_t *) malloc(ev_sz);
   // XXX check return value
   bcopy(ev, copy, ev_sz);
-
-  cur = Subscription::event_queue;
-  if (!cur) {
-    Subscription::event_queue = cur =
-     (event_node *) malloc(sizeof(event_node));
-    // XXX check return value
-  }
-  else {
-     while((cur = cur->next));
-  }
-
-  cur->ev = copy;
-  cur->next = NULL;
+  Subscription::event_queue.push_back(copy);
 }
 
 void Subscription::event_handler(sysevent_t *ev) {
   EnqueueEvent(ev);
   
   // Trigger the notifier.
-  ev_async_send(EV_DEFAULT_UC_ &Subscription::eio_notifier);
-  
-  //subscription_node *cursor = Subscription::all_subscriptions;
-  //Subscription *sub = cursor->sub;
+  if (Subscription::subscription_count > 0) {
+    ev_async_send(EV_DEFAULT_UC_ &Subscription::eio_notifier);
+  }
 }
 
 void Event(EV_P_ ev_async *watcher, int revents) {
   HandleScope scope;
-  Subscription *subscr = NULL;
-  subscription_node *cursor = NULL;
+  pid_t pid;
+  Subscription *subscr(NULL);
 
   // XXX TODO find the right subscription object, not just the first.
-  cursor = Subscription::all_subscriptions;
-  subscr = cursor->sub;
+  subscr = Subscription::all_subscriptions.front();
 
-  event_node *cur = Subscription::event_queue;
-  pid_t pid;
-  int seq;
+  std::list<sysevent_t *>::iterator iter = Subscription::event_queue.begin();
 
-  do {
+  for (; iter != Subscription::event_queue.end(); iter++) {
+    sysevent_t *ev = *iter;
+    sysevent_get_pid(ev, &pid);
+
     // Create new JavaScript event hash
     // { pub: 'foo', vendor: 'bar', class: 'baz', subclass: 'quux' }
-    sysevent_t *ev = cur->ev;
-    sysevent_get_pid(ev, &pid);
-    seq = sysevent_get_seq(ev);
     v8::Local<v8::Object> event = v8::Object::New();
     event->Set(String::New("class"), String::New(sysevent_get_class_name(ev)));
     event->Set(String::New("subclass"),
@@ -73,12 +58,12 @@ void Event(EV_P_ ev_async *watcher, int revents) {
     event->Set(String::New("vendor"), String::New(sysevent_get_vendor_name(ev)));
     event->Set(String::New("pub"), String::New(sysevent_get_pub_name(ev)));
     event->Set(String::New("pid"), Number::New(pid));
-    event->Set(String::New("seq"), Number::New(seq));
+    event->Set(String::New("seq"), Number::New(sysevent_get_seq(ev)));
 
     subscr->Emit(String::NewSymbol("event"), 1,
       reinterpret_cast<Handle<Value> *>(&event));
-    free(cur->ev);
-  } while ((Subscription::event_queue = cur->next));
+    free(ev);
+  }
 }
 
 void Subscription::Init(v8::Handle<Object> target) {
@@ -126,10 +111,7 @@ Handle<Value> Subscription::Subscribe(const Arguments &args) {
 
   // Record the class and subclass to which we are subscribing.
   subscr->subscribed_class = strdup(*event_class);
-  subscr->num_subclasses = 1;
-  subscr->subscribed_subclasses
-    = (char **) malloc(sizeof(char) * subscr->num_subclasses);
-  subscr->subscribed_subclasses[0] = strdup(*event_subclass);
+  subscr->subscribed_subclasses.push_back(*event_subclass);
 
   // Create and check sysevent bind handle.
   subscr->shp = sysevent_bind_handle(&Subscription::event_handler);
@@ -138,19 +120,11 @@ Handle<Value> Subscription::Subscribe(const Arguments &args) {
     exit(1);
   }
 
-  // Keep track of this subscription information so we can traverse it when an
-  // event is fired.
-  subscription_node *cur
-    = (subscription_node *) malloc(sizeof(subscription_node));
-
-  cur->sub = subscr;
-  cur->next = Subscription::all_subscriptions;
-  Subscription::all_subscriptions = cur;
-
   // Subscribe to events.
-  const char *subclasses[] = { EC_SUB_ALL };
-
-  if (sysevent_subscribe_event(subscr->shp, *event_class, subclasses, 1) != 0) {
+  Subscription::all_subscriptions.push_back(subscr);
+  
+  if (sysevent_subscribe_event(subscr->shp, *event_class,
+        (const char **)&(subscr->subscribed_subclasses[0]), 1) != 0) {
     sysevent_unbind_handle(subscr->shp);
     exit(1); // XXX fix
   }
