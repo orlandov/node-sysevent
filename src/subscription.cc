@@ -4,6 +4,7 @@
 
 #include <list>
 #include <vector>
+#include <algorithm>
 
 using namespace v8;
 using namespace node;
@@ -12,7 +13,6 @@ Persistent<FunctionTemplate> Subscription::constructor_template;
 ev_async Subscription::eio_notifier;
 std::list<Subscription *> Subscription::all_subscriptions;
 std::list<sysevent_t *> Subscription::event_queue;
-int Subscription::subscription_count = 0;
 
 void EnqueueEvent(sysevent_t *ev) {
   int ev_sz = 0;
@@ -31,7 +31,7 @@ void Subscription::event_handler(sysevent_t *ev) {
   EnqueueEvent(ev);
   
   // Trigger the notifier.
-  if (Subscription::subscription_count > 0) {
+  if (Subscription::all_subscriptions.size() > 0) {
     ev_async_send(EV_DEFAULT_UC_ &Subscription::eio_notifier);
   }
 }
@@ -42,28 +42,50 @@ void Event(EV_P_ ev_async *watcher, int revents) {
   Subscription *subscr(NULL);
 
   // XXX TODO find the right subscription object, not just the first.
-  subscr = Subscription::all_subscriptions.front();
+  //subscr = Subscription::all_subscriptions.front();
 
-  std::list<sysevent_t *>::iterator iter = Subscription::event_queue.begin();
 
-  for (; iter != Subscription::event_queue.end(); iter++) {
-    sysevent_t *ev = *iter;
-    sysevent_get_pid(ev, &pid);
+  std::list<sysevent_t *>::iterator iter_event = Subscription::event_queue.begin();
+  for (; iter_event != Subscription::event_queue.end(); iter_event++) {
+    sysevent_t *ev = *iter_event;
+    char *class_name = sysevent_get_class_name(ev);
+    char *subclass_name = sysevent_get_subclass_name(ev);
 
-    // Create new JavaScript event hash
-    // { pub: 'foo', vendor: 'bar', class: 'baz', subclass: 'quux' }
-    v8::Local<v8::Object> event = v8::Object::New();
-    event->Set(String::New("class"), String::New(sysevent_get_class_name(ev)));
-    event->Set(String::New("subclass"),
-      String::New(sysevent_get_subclass_name(ev)));
-    event->Set(String::New("vendor"), String::New(sysevent_get_vendor_name(ev)));
-    event->Set(String::New("pub"), String::New(sysevent_get_pub_name(ev)));
-    event->Set(String::New("pid"), Number::New(pid));
-    event->Set(String::New("seq"), Number::New(sysevent_get_seq(ev)));
+    std::list<Subscription *>::iterator iter_sub
+      = Subscription::all_subscriptions.begin();
 
-    subscr->Emit(String::NewSymbol("event"), 1,
-      reinterpret_cast<Handle<Value> *>(&event));
-    free(ev);
+    for (; iter_sub != Subscription::all_subscriptions.end(); iter_sub++) {
+      subscr = *iter_sub;
+      // Abort cycle if class name does not match.
+      if (strcmp(subscr->subscribed_class, class_name)) {
+        continue;
+      }
+
+      std::vector<char *>::iterator iter_subclasses = subscr->subscribed_subclasses.begin();
+      for (; iter_subclasses != subscr->subscribed_subclasses.end(); iter_subclasses++) {
+        if (strcmp(*iter_subclasses, subclass_name)) {
+          continue;
+        }
+
+        sysevent_get_pid(ev, &pid);
+        // Create new JavaScript event hash
+        // { pub: 'foo', vendor: 'bar', class: 'baz', subclass: 'quux' }
+        v8::Local<v8::Object> event = v8::Object::New();
+        event->Set(String::New("class"), String::New(class_name));
+        event->Set(String::New("subclass"),
+          String::New(subclass_name));
+        event->Set(String::New("vendor"),
+          String::New(sysevent_get_vendor_name(ev)));
+        event->Set(String::New("pub"),
+          String::New(sysevent_get_pub_name(ev)));
+        event->Set(String::New("pid"), Number::New(pid));
+        event->Set(String::New("seq"), Number::New(sysevent_get_seq(ev)));
+
+        subscr->Emit(String::NewSymbol("event"), 1,
+          reinterpret_cast<Handle<Value> *>(&event));
+        free(ev);
+      }
+    }
   }
 }
 
@@ -100,7 +122,7 @@ Handle<Value> Subscription::Subscribe(const Arguments &args) {
   REQUIRE_STRING_ARG(args, 0, event_class);
   REQUIRE_STRING_ARG(args, 1, event_subclass);
 
-  if (Subscription::subscription_count++ == 0) {
+  if (Subscription::all_subscriptions.size() == 0) {
     // Initialize the async notifier and start watching it. This is what let
     // us know when the event_handler function has added an to the event queue.
     ev_async_init(&Subscription::eio_notifier, &Event);
@@ -142,10 +164,6 @@ Handle<Value> Subscription::Unsubscribe(const Arguments &args) {
   Subscription *subscr = ObjectWrap::Unwrap<Subscription>(args.This());
   sysevent_unbind_handle(subscr->shp);
 
-  if (--Subscription::subscription_count == 0) {
-    ev_async_stop(EV_DEFAULT_UC_ &Subscription::eio_notifier);
-  }
-
   // Free class string
   free(subscr->subscribed_class);
 
@@ -156,6 +174,10 @@ Handle<Value> Subscription::Unsubscribe(const Arguments &args) {
   }
 
   all_subscriptions.remove(subscr);
+
+  if (Subscription::all_subscriptions.size() == 0) {
+    ev_async_stop(EV_DEFAULT_UC_ &Subscription::eio_notifier);
+  }
 
   subscr->Unref();
   ev_unref(EV_DEFAULT_UC);

@@ -20,10 +20,12 @@ class Subscription: public EventEmitter {
     static void Init(v8::Handle<Object> target);
 
     static void event_handler(sysevent_t *ev);
+
     static ev_async eio_notifier;
     static std::list<Subscription *> all_subscriptions;
     static std::list<sysevent_t *> event_queue;
-    static int subscription_count;
+    char *subscribed_class;
+    std::vector<char *> subscribed_subclasses;
 
   protected:
     Subscription();
@@ -33,8 +35,6 @@ class Subscription: public EventEmitter {
     static Handle<Value> Subscribe(const Arguments& args);
     static Handle<Value> Unsubscribe(const Arguments& args);
 
-    char *subscribed_class;
-    std::vector<char *> subscribed_subclasses;
 
   private:
     sysevent_handle_t *shp;

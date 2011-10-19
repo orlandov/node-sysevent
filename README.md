@@ -34,6 +34,7 @@ sysevent is a low-level mechanism via which publishers and consumers can communi
 - If an `attrs` nvlist_t object is set on an incoming event, convert it to a javascript object and attach to the `event` object given on the `event` callback.  
 - Allow user to specify more than one subclass when subscribing.
 - Crudely measured the `syevent_subscribe_events` call taking between 0.1 and 0.2 milliseconds to execute. Should punt into the libev threadpool.
+- Locking.
 
 ## ENVIRONMENT
 
