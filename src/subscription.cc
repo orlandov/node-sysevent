@@ -23,6 +23,7 @@ void EnqueueEvent(sysevent_t *ev) {
   copy = (sysevent_t *) malloc(ev_sz);
   // XXX check return value
   bcopy(ev, copy, ev_sz);
+
   Subscription::event_queue.push_back(copy);
 }
 
@@ -111,7 +112,7 @@ Handle<Value> Subscription::Subscribe(const Arguments &args) {
 
   // Record the class and subclass to which we are subscribing.
   subscr->subscribed_class = strdup(*event_class);
-  subscr->subscribed_subclasses.push_back(*event_subclass);
+  subscr->subscribed_subclasses.push_back(strdup(*event_subclass));
 
   // Create and check sysevent bind handle.
   subscr->shp = sysevent_bind_handle(&Subscription::event_handler);
@@ -122,7 +123,7 @@ Handle<Value> Subscription::Subscribe(const Arguments &args) {
 
   // Subscribe to events.
   Subscription::all_subscriptions.push_back(subscr);
-  
+
   if (sysevent_subscribe_event(subscr->shp, *event_class,
         (const char **)&(subscr->subscribed_subclasses[0]), 1) != 0) {
     sysevent_unbind_handle(subscr->shp);
@@ -144,6 +145,17 @@ Handle<Value> Subscription::Unsubscribe(const Arguments &args) {
   if (--Subscription::subscription_count == 0) {
     ev_async_stop(EV_DEFAULT_UC_ &Subscription::eio_notifier);
   }
+
+  // Free class string
+  free(subscr->subscribed_class);
+
+  // Free subclass strings
+  std::vector<char *>::iterator iter = subscr->subscribed_subclasses.begin();
+  for (; iter != subscr->subscribed_subclasses.end(); iter++) {
+    free(*iter);
+  }
+
+  all_subscriptions.remove(subscr);
 
   subscr->Unref();
   ev_unref(EV_DEFAULT_UC);
