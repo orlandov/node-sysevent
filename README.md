@@ -50,6 +50,7 @@ Warning: some things are not quite implemented yet so use at your own risk.
 * http://blogs.oracle.com/eschrock/entry/dtrace_sysevent_provider
 * http://www.filibeto.org/sun/lib/solaris10-docs/E19253-01/816-5180/6mbbf02g5/index.html
 * http://www.unix.com/man-page/OpenSolaris/3nvpair/nvlist_alloc/
+* https://github.com/mcavage/node-zutil/blob/master/src/zutil_common.h
 
 ## AUTHOR
 
